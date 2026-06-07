@@ -276,7 +276,7 @@ require("lazy").setup({
 		dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
 		config = function()
 			require("mason-lspconfig").setup({
-				ensure_installed = { "ts_ls", "lua_ls", "eslint", "ruby_lsp" },
+				ensure_installed = { "ts_ls", "lua_ls", "eslint", "ruby_lsp", "zls" },
 			})
 		end,
 	},
@@ -354,6 +354,10 @@ require("lazy").setup({
 				},
 			})
 			vim.lsp.enable("ruby_lsp")
+
+			-- Zig
+			vim.lsp.config("zls", { capabilities = capabilities })
+			vim.lsp.enable("zls")
 		end,
 	},
 	-- ==================================================
