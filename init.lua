@@ -7,7 +7,6 @@ vim.g.mapleader = " "
 -- Basic Settings
 -- ==================================================
 local set = vim.opt
-set.lazyredraw = true
 set.splitright = true
 set.splitbelow = true
 set.expandtab = true
@@ -23,21 +22,17 @@ set.updatetime = 250
 set.autoread = true
 set.scrolloff = 8
 set.cursorline = true
+set.undofile = true -- Persistent undo across sessions
 
--- Show diagnostics on hover only (cleaner)
+-- Diagnostics: virtual_lines shows the current line's diagnostic inline (Nvim 0.11+),
+-- which replaces the old CursorHold + open_float pattern.
 vim.diagnostic.config({
-	virtual_text = false, -- No inline text
+	virtual_text = false, -- No inline text on every line
+	virtual_lines = { current_line = true }, -- Expand only under the cursor
 	signs = true, -- Keep gutter markers (E, W)
 	underline = true, -- Keep underlines
 	update_in_insert = false,
 	severity_sort = true,
-})
-
--- Show diagnostic popup on hover
-vim.api.nvim_create_autocmd("CursorHold", {
-	callback = function()
-		vim.diagnostic.open_float(nil, { focusable = false })
-	end,
 })
 
 -- ==================================================
@@ -266,35 +261,43 @@ require("lazy").setup({
 	-- LSP (Language Server Protocol)
 	-- ==================================================
 	{
-		"williamboman/mason.nvim",
+		-- Note: the mason projects moved from williamboman/* to mason-org/*.
+		"mason-org/mason.nvim",
 		config = function()
 			require("mason").setup()
 		end,
 	},
 	{
-		"williamboman/mason-lspconfig.nvim",
-		dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
+		"mason-org/mason-lspconfig.nvim",
+		dependencies = { "mason-org/mason.nvim", "neovim/nvim-lspconfig" },
 		config = function()
 			require("mason-lspconfig").setup({
 				ensure_installed = { "ts_ls", "lua_ls", "eslint", "ruby_lsp", "zls" },
+				-- mason-lspconfig 2.x auto-enables every Mason-installed server by
+				-- default. We enable each one explicitly below (with settings), so
+				-- turn that off to keep a single source of truth.
+				automatic_enable = false,
 			})
 		end,
 	},
 	{
 		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = { "williamboman/mason.nvim" },
+		dependencies = { "mason-org/mason.nvim" },
 		config = function()
 			require("mason-tool-installer").setup({
 				ensure_installed = {
 					"eslint_d",
 					"stylua",
+					-- Required by nvim-treesitter (main). Mason ships it as a prebuilt
+					-- GitHub release binary, so this needs no cargo/brew/apt.
+					"tree-sitter-cli",
 				},
 			})
 		end,
 	},
 	{
 		"neovim/nvim-lspconfig",
-		dependencies = { "williamboman/mason-lspconfig.nvim", "hrsh7th/cmp-nvim-lsp" },
+		dependencies = { "mason-org/mason-lspconfig.nvim", "hrsh7th/cmp-nvim-lsp" },
 		config = function()
 			local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
@@ -384,7 +387,6 @@ require("lazy").setup({
 -- ==================================================
 -- Additional Keymaps
 -- ==================================================
--- Diagnostic navigation
-vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
-vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
+-- Note: [d and ]d are built-in default mappings in Nvim 0.11+, so they are not
+-- redefined here. vim.diagnostic.goto_prev/goto_next are deprecated (removed in 0.13).
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
