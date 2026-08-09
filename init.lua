@@ -185,9 +185,64 @@ require("lazy").setup({
 			require("fzf-lua").register_ui_select()
 		end,
 		keys = {
-			{ "<leader>ff", ":lua require('fzf-lua').files()<CR>" },
-			{ "<leader>fg", ":lua require('fzf-lua').live_grep()<CR>" },
-			{ "<leader>fw", ":lua require('fzf-lua').grep_cword()<CR>", desc = "Grep word under cursor" },
+			-- Function references rather than ":lua require(...)<CR>" strings: no
+			-- command-line flash, and errors surface properly.
+			{
+				"<leader>ff",
+				function()
+					require("fzf-lua").files()
+				end,
+				desc = "Find files",
+			},
+			{
+				"<leader>fg",
+				function()
+					require("fzf-lua").live_grep()
+				end,
+				desc = "Live grep",
+			},
+			{
+				"<leader>fw",
+				function()
+					require("fzf-lua").grep_cword()
+				end,
+				desc = "Grep word under cursor",
+			},
+			{
+				"<leader>fb",
+				function()
+					require("fzf-lua").buffers()
+				end,
+				desc = "Buffers",
+			},
+			{
+				"<leader>gs",
+				function()
+					require("fzf-lua").git_status()
+				end,
+				desc = "Git status",
+			},
+			{
+				"<leader>gl",
+				function()
+					require("fzf-lua").git_commits()
+				end,
+				desc = "Git log (repo)",
+			},
+			{
+				"<leader>gf",
+				function()
+					require("fzf-lua").git_bcommits()
+				end,
+				desc = "Git log (file)",
+			},
+			{
+				"<leader>gb",
+				function()
+					require("fzf-lua").git_branches()
+				end,
+				desc = "Git branches",
+			},
 		},
 	},
 	{
@@ -254,27 +309,30 @@ require("lazy").setup({
 		end,
 	},
 	{
-		"sindrets/diffview.nvim",
-		dependencies = { "nvim-tree/nvim-web-devicons" },
-		cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewFileHistory" },
+		-- Replaces diffview.nvim, which had no commits for ~2 years. codediff is
+		-- actively maintained and is the diff backend neogit now recommends.
+		"esmuellert/codediff.nvim",
+		cmd = { "CodeDiff" },
 		keys = {
-			{ "<leader>dv", ":DiffviewOpen<CR>", desc = "Diff vs HEAD" },
-			{ "<leader>dh", ":DiffviewFileHistory %<CR>", desc = "File history" },
-			{ "<leader>dm", ":DiffviewOpen master<CR>", desc = "Diff vs master" },
-			{ "<leader>dc", ":DiffviewClose<CR>", desc = "Close diffview" },
-			{ "<leader>dr", ":DiffviewRefresh<CR>", desc = "Refresh diffview" },
+			{ "<leader>dv", "<cmd>CodeDiff<CR>", desc = "Diff vs HEAD" },
+			{ "<leader>dh", "<cmd>CodeDiff history %<CR>", desc = "File history" },
+			{ "<leader>dm", "<cmd>CodeDiff master<CR>", desc = "Diff vs master" },
+			{ "<leader>ds", "<cmd>CodeDiff --staged<CR>", desc = "Diff staged" },
+			{ "<leader>dc", "<cmd>tabclose<CR>", desc = "Close diff tab" },
 		},
-		config = function()
-			require("diffview").setup()
-			-- Auto-refresh when in diffview (to watch changes live)
-			vim.api.nvim_create_autocmd({ "FocusGained", "CursorHold", "CursorMoved", "BufEnter" }, {
-				pattern = "diffview://*",
-				callback = function()
-					vim.cmd("silent! checktime")
-					vim.cmd("silent! DiffviewRefresh")
-				end,
-			})
-		end,
+		opts = {},
+	},
+	{
+		-- Magit-style staging/commit/branch UI. Pure Lua, no external binary
+		-- (unlike lazygit), and no longer requires plenary.
+		"NeogitOrg/neogit",
+		dependencies = { "ibhagwan/fzf-lua", "esmuellert/codediff.nvim" },
+		cmd = "Neogit",
+		keys = {
+			{ "<leader>gg", "<cmd>Neogit<CR>", desc = "Neogit status" },
+			{ "<leader>gc", "<cmd>Neogit commit<CR>", desc = "Neogit commit" },
+		},
+		opts = {},
 	},
 	-- ==================================================
 	-- Formatting
@@ -461,6 +519,42 @@ require("lazy").setup({
 			vim.lsp.config("zls", { capabilities = capabilities })
 			vim.lsp.enable("zls")
 		end,
+	},
+	-- ==================================================
+	-- UI / Editing (all pure Lua, no external binaries)
+	-- ==================================================
+	{
+		"folke/which-key.nvim",
+		event = "VeryLazy",
+		opts = {},
+		keys = {
+			{
+				"<leader>?",
+				function()
+					require("which-key").show({ global = false })
+				end,
+				desc = "Buffer-local keymaps",
+			},
+		},
+	},
+	{
+		"kylechui/nvim-surround",
+		version = "*",
+		event = "VeryLazy",
+		opts = {},
+	},
+	{
+		"nvim-lualine/lualine.nvim",
+		dependencies = { "nvim-tree/nvim-web-devicons" },
+		event = "VeryLazy",
+		opts = {
+			options = {
+				theme = "auto", -- Picks up kanagawa automatically
+				globalstatus = true,
+				section_separators = "",
+				component_separators = "",
+			},
+		},
 	},
 	-- ==================================================
 	-- Claude Code IDE Integration
