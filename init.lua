@@ -24,17 +24,34 @@ set.scrolloff = 8
 set.cursorline = true
 set.undofile = true -- Persistent undo across sessions
 
--- Diagnostics: show the message inline on the cursor's line only (Nvim 0.11+),
--- replacing the old CursorHold + open_float pattern. virtual_text keeps it on a
--- single line so the buffer never shifts as the cursor moves; swap to
--- virtual_lines = { current_line = true } if you want full multi-line messages.
+-- Diagnostics: nothing inline. Signs and underlines give the ambient "something
+-- is wrong here" signal, and the full message appears in a float on CursorHold.
+-- Unlike virtual_text (truncates at the window edge) and virtual_lines (pushes
+-- the buffer down), a float costs no buffer space and shows every diagnostic on
+-- the line, which matters for long TypeScript errors.
 vim.diagnostic.config({
-	virtual_text = { current_line = true }, -- Inline, cursor line only
+	virtual_text = false,
 	virtual_lines = false,
 	signs = true, -- Keep gutter markers (E, W)
 	underline = true, -- Keep underlines
 	update_in_insert = false,
 	severity_sort = true,
+})
+
+-- Show the diagnostic float when the cursor rests ('updatetime' controls the
+-- delay; raise it if this feels twitchy). <C-w>d is the built-in on-demand
+-- equivalent if you ever want to drop the automatic behaviour.
+vim.api.nvim_create_autocmd("CursorHold", {
+	callback = function()
+		-- Never stack on top of an existing float, so a hover (K) or signature
+		-- popup does not get clobbered while you are reading it.
+		for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+			if vim.api.nvim_win_get_config(win).relative ~= "" then
+				return
+			end
+		end
+		vim.diagnostic.open_float(nil, { focusable = false })
+	end,
 })
 
 -- ==================================================
