@@ -352,8 +352,13 @@ require("lazy").setup({
 					typescriptreact = { "eslint_d" },
 					lua = { "stylua" },
 				},
-				format_after_save = {
-					lsp_fallback = true,
+				-- format_on_save runs on BufWritePre, synchronously: one write.
+				-- format_after_save runs on BufWritePost asynchronously, which writes
+				-- the file, formats, then writes again -- double file-watcher and HMR
+				-- events for anything watching the tree.
+				format_on_save = {
+					lsp_format = "fallback", -- The modern spelling of lsp_fallback = true
+					timeout_ms = 2000,
 				},
 			})
 		end,
@@ -402,31 +407,26 @@ require("lazy").setup({
 	-- LSP (Language Server Protocol)
 	-- ==================================================
 	{
-		-- Note: the mason projects moved from williamboman/* to mason-org/*.
+		-- Mason installs every external binary into stdpath("data")/mason/bin and
+		-- prepends that to PATH. Note: the mason projects moved to mason-org/*.
+		--
+		-- mason-lspconfig is deliberately not used. Its only remaining jobs were
+		-- translating lspconfig server names into Mason package names, and
+		-- auto-enabling installed servers, which we already do explicitly. Naming
+		-- packages directly keeps every tool in one declarative list.
 		"mason-org/mason.nvim",
+		dependencies = { "WhoIsSethDaniel/mason-tool-installer.nvim" },
 		config = function()
 			require("mason").setup()
-		end,
-	},
-	{
-		"mason-org/mason-lspconfig.nvim",
-		dependencies = { "mason-org/mason.nvim", "neovim/nvim-lspconfig" },
-		config = function()
-			require("mason-lspconfig").setup({
-				ensure_installed = { "ts_ls", "lua_ls", "eslint", "ruby_lsp", "zls" },
-				-- mason-lspconfig 2.x auto-enables every Mason-installed server by
-				-- default. We enable each one explicitly below (with settings), so
-				-- turn that off to keep a single source of truth.
-				automatic_enable = false,
-			})
-		end,
-	},
-	{
-		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = { "mason-org/mason.nvim" },
-		config = function()
 			require("mason-tool-installer").setup({
 				ensure_installed = {
+					-- LSP servers (Mason package names, not lspconfig names)
+					"typescript-language-server",
+					"lua-language-server",
+					"eslint-lsp",
+					"ruby-lsp",
+					"zls",
+					-- Formatters
 					"eslint_d",
 					"stylua",
 					-- Required by nvim-treesitter (main). Mason ships it as a prebuilt
@@ -437,50 +437,56 @@ require("lazy").setup({
 		end,
 	},
 	{
+		-- On 0.11+ this plugin is essentially a data package: it ships lsp/*.lua
+		-- definitions (cmd, filetypes, root_markers) that Neovim auto-loads from
+		-- the runtimepath. Configuration below uses the native vim.lsp API.
 		"neovim/nvim-lspconfig",
-		dependencies = { "mason-org/mason-lspconfig.nvim", "saghen/blink.cmp" },
+		dependencies = { "mason-org/mason.nvim", "saghen/blink.cmp" },
 		config = function()
+			-- "*" applies to every server, replacing the per-server repetition.
 			-- The second arg folds in Neovim's own defaults, which cmp_nvim_lsp's
 			-- default_capabilities() did not do.
-			local capabilities = require("blink.cmp").get_lsp_capabilities(nil, true)
+			vim.lsp.config("*", {
+				capabilities = require("blink.cmp").get_lsp_capabilities(nil, true),
+			})
 
-			-- Keybinds when LSP attaches
+			-- Neovim 0.11+ already provides grn (rename), gra (code action),
+			-- grr (references), gri (implementation), grt (type definition),
+			-- gO (document symbol), K (hover) and insert-mode <C-s> (signature).
+			-- Only override where fzf-lua's picker is a genuine upgrade.
+			--
+			-- Do NOT map bare "gr": it is the prefix of the gr* defaults above, so
+			-- mapping it makes all of them wait for 'timeoutlen' before resolving.
 			vim.api.nvim_create_autocmd("LspAttach", {
 				callback = function(args)
 					local opts = { buffer = args.buf }
-					vim.keymap.set("n", "gd", "<cmd>lua require('fzf-lua').lsp_definitions()<CR>", opts)
-					vim.keymap.set("n", "gr", "<cmd>lua require('fzf-lua').lsp_references()<CR>", opts)
-					vim.keymap.set("n", "gh", vim.lsp.buf.hover, opts)
-					vim.keymap.set("n", "gf", "<cmd>lua require('fzf-lua').lsp_code_actions()<CR>", opts)
+					vim.keymap.set("n", "gd", function()
+						require("fzf-lua").lsp_definitions()
+					end, vim.tbl_extend("force", opts, { desc = "Goto definition" }))
+					vim.keymap.set("n", "grr", function()
+						require("fzf-lua").lsp_references()
+					end, vim.tbl_extend("force", opts, { desc = "References" }))
 				end,
 			})
 
-			-- TypeScript/JavaScript
-			vim.lsp.config("ts_ls", { capabilities = capabilities })
-			vim.lsp.enable("ts_ls")
-
 			-- Lua
 			vim.lsp.config("lua_ls", {
-				capabilities = capabilities,
 				settings = {
 					Lua = { diagnostics = { globals = { "vim" } } },
 				},
 			})
-			vim.lsp.enable("lua_ls")
 
-			-- ESLint (for real-time linting diagnostics)
+			-- ESLint (real-time linting diagnostics; formatting is done by eslint_d
+			-- via conform, so the server's own formatter is disabled)
 			vim.lsp.config("eslint", {
-				capabilities = capabilities,
 				settings = {
 					format = false,
 					workingDirectory = { mode = "auto" },
 				},
 			})
-			vim.lsp.enable("eslint")
 
 			-- Ruby
 			vim.lsp.config("ruby_lsp", {
-				capabilities = capabilities,
 				flags = {
 					debounce_text_changes = 150,
 				},
@@ -499,11 +505,9 @@ require("lazy").setup({
 					},
 				},
 			})
-			vim.lsp.enable("ruby_lsp")
 
-			-- Zig
-			vim.lsp.config("zls", { capabilities = capabilities })
-			vim.lsp.enable("zls")
+			-- ts_ls and zls need no extra settings beyond the "*" defaults.
+			vim.lsp.enable({ "ts_ls", "lua_ls", "eslint", "ruby_lsp", "zls" })
 		end,
 	},
 	-- ==================================================
