@@ -74,14 +74,113 @@ require("lazy").setup({
 		end,
 	},
 	-- ==================================================
+	-- Treesitter (syntax, injections, textobjects)
+	-- ==================================================
+	{
+		-- The `main` branch is a full rewrite; `master` is locked and targets 0.11.
+		-- It explicitly does not support lazy-loading, hence lazy = false.
+		"nvim-treesitter/nvim-treesitter",
+		branch = "main",
+		lazy = false,
+		build = ":TSUpdate",
+		config = function()
+			require("nvim-treesitter").setup()
+
+			local parsers = {
+				"bash",
+				"css",
+				"diff",
+				"dockerfile",
+				"gitcommit",
+				"gitignore",
+				"html",
+				"javascript",
+				"json", -- the jsonc filetype maps onto this parser
+				"lua",
+				"luadoc",
+				"markdown",
+				"markdown_inline",
+				"python",
+				"ruby",
+				"toml",
+				"tsx",
+				"typescript",
+				"vim",
+				"vimdoc",
+				"yaml",
+				"zig",
+			}
+
+			-- Highlighting is not automatic on `main`; Neovim provides it and we opt in
+			-- per buffer. Deriving the language from the filetype avoids maintaining a
+			-- parallel filetype list.
+			vim.api.nvim_create_autocmd("FileType", {
+				group = vim.api.nvim_create_augroup("treesitter_start", { clear = true }),
+				callback = function(args)
+					local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+					if lang and pcall(vim.treesitter.language.add, lang) then
+						pcall(vim.treesitter.start, args.buf, lang)
+					end
+				end,
+			})
+
+			local function install_parsers()
+				if vim.fn.executable("tree-sitter") == 1 then
+					require("nvim-treesitter").install(parsers)
+					return true
+				end
+				return false
+			end
+
+			-- On a cold start, mason-tool-installer downloads tree-sitter-cli
+			-- asynchronously and prepends Mason's bin to PATH, so installing parsers
+			-- immediately would race it. Wait for Mason instead of failing.
+			vim.api.nvim_create_autocmd("VimEnter", {
+				once = true,
+				callback = function()
+					if install_parsers() then
+						return
+					end
+					vim.api.nvim_create_autocmd("User", {
+						pattern = "MasonToolsUpdateCompleted",
+						once = true,
+						callback = function()
+							vim.schedule(function()
+								if not install_parsers() then
+									vim.notify(
+										"nvim-treesitter: `tree-sitter` CLI not found.\n"
+											.. "Run :MasonToolsInstall, then :TSUpdate.",
+										vim.log.levels.WARN
+									)
+								end
+							end)
+						end,
+					})
+				end,
+			})
+		end,
+	},
+	-- ==================================================
 	-- File Management
 	-- ==================================================
 	{
 		"ibhagwan/fzf-lua",
 		dependencies = {
 			"nvim-tree/nvim-web-devicons",
+			-- Self-installing fzf binary. `install --bin` downloads a prebuilt
+			-- per-arch tarball (no Go toolchain) and is a no-op once present, so
+			-- fzf-lua works on a fresh machine without brew/apt.
+			{
+				"junegunn/fzf",
+				build = "./install --bin",
+			},
 		},
 		config = function()
+			-- Prefer the plugin-local fzf binary; lazy.nvim does not add it to PATH.
+			local fzf_bin = vim.fn.stdpath("data") .. "/lazy/fzf/bin"
+			if vim.fn.isdirectory(fzf_bin) == 1 then
+				vim.env.PATH = fzf_bin .. ":" .. vim.env.PATH
+			end
 			require("fzf-lua").setup()
 			require("fzf-lua").register_ui_select()
 		end,
