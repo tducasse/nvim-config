@@ -362,59 +362,41 @@ require("lazy").setup({
 	-- Autocompletion
 	-- ==================================================
 	{
-		"hrsh7th/nvim-cmp",
+		-- Replaces nvim-cmp + cmp-nvim-lsp/buffer/path + LuaSnip + cmp_luasnip.
+		-- Snippets use Neovim's built-in vim.snippet, so LuaSnip is unnecessary.
+		-- Pinned to 1.x: v2 is a breaking rewrite that additionally requires
+		-- blink.lib, and only 1.x is tagged for release. The pinned tag also means
+		-- lazy.nvim fetches a prebuilt Rust fuzzy matcher, so no cargo is needed.
+		"saghen/blink.cmp",
+		version = "1.*",
 		event = "InsertEnter",
-		dependencies = {
-			"hrsh7th/cmp-nvim-lsp",
-			"hrsh7th/cmp-buffer",
-			"hrsh7th/cmp-path",
-			"L3MON4D3/LuaSnip",
-			"saadparwaiz1/cmp_luasnip",
+		opts = {
+			-- 'super-tab' matches the previous behaviour: Tab accepts the selected
+			-- item when the menu is open, otherwise jumps forward in a snippet,
+			-- otherwise falls through to normal Tab.
+			keymap = {
+				preset = "super-tab",
+				["<CR>"] = { "select_and_accept", "fallback" },
+				-- Preserved verbatim from the nvim-cmp config, including the
+				-- inverted feel: <C-d> scrolled docs up, <C-u> scrolled them down.
+				["<C-d>"] = { "scroll_documentation_up", "fallback" },
+				["<C-u>"] = { "scroll_documentation_down", "fallback" },
+			},
+			sources = {
+				-- blink ranks a single merged list rather than using nvim-cmp's
+				-- fallback groups.
+				default = { "lsp", "path", "snippets", "buffer" },
+			},
+			completion = {
+				-- Off by default in blink; nvim-cmp showed the docs window, so keep it.
+				documentation = { auto_show = true, auto_show_delay_ms = 200 },
+				-- accept.auto_brackets is already enabled by default: accepting a
+				-- function inserts () and places the cursor inside.
+			},
+			-- Signature help while typing arguments; the old cmp setup had none.
+			signature = { enabled = true },
+			fuzzy = { implementation = "prefer_rust_with_warning" },
 		},
-		config = function()
-			local cmp = require("cmp")
-			local luasnip = require("luasnip")
-
-			cmp.setup({
-				snippet = {
-					expand = function(args)
-						luasnip.lsp_expand(args.body)
-					end,
-				},
-				mapping = cmp.mapping.preset.insert({
-					["<C-n>"] = cmp.mapping.select_next_item(),
-					["<C-p>"] = cmp.mapping.select_prev_item(),
-					["<C-d>"] = cmp.mapping.scroll_docs(-4),
-					["<C-u>"] = cmp.mapping.scroll_docs(4),
-					["<C-Space>"] = cmp.mapping.complete(),
-					["<C-e>"] = cmp.mapping.abort(),
-					["<CR>"] = cmp.mapping.confirm({ select = true }),
-					["<Tab>"] = cmp.mapping(function(fallback)
-						if cmp.visible() then
-							cmp.confirm({ select = true })
-						elseif luasnip.expand_or_jumpable() then
-							luasnip.expand_or_jump()
-						else
-							fallback()
-						end
-					end, { "i", "s" }),
-					["<S-Tab>"] = cmp.mapping(function(fallback)
-						if luasnip.jumpable(-1) then
-							luasnip.jump(-1)
-						else
-							fallback()
-						end
-					end, { "i", "s" }),
-				}),
-				sources = cmp.config.sources({
-					{ name = "nvim_lsp" },
-					{ name = "luasnip" },
-				}, {
-					{ name = "buffer" },
-					{ name = "path" },
-				}),
-			})
-		end,
 	},
 	-- ==================================================
 	-- LSP (Language Server Protocol)
@@ -456,9 +438,11 @@ require("lazy").setup({
 	},
 	{
 		"neovim/nvim-lspconfig",
-		dependencies = { "mason-org/mason-lspconfig.nvim", "hrsh7th/cmp-nvim-lsp" },
+		dependencies = { "mason-org/mason-lspconfig.nvim", "saghen/blink.cmp" },
 		config = function()
-			local capabilities = require("cmp_nvim_lsp").default_capabilities()
+			-- The second arg folds in Neovim's own defaults, which cmp_nvim_lsp's
+			-- default_capabilities() did not do.
+			local capabilities = require("blink.cmp").get_lsp_capabilities(nil, true)
 
 			-- Keybinds when LSP attaches
 			vim.api.nvim_create_autocmd("LspAttach", {

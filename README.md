@@ -40,6 +40,7 @@ Deliberately, no package manager is required for any of this:
 | `eslint_d`, `stylua` | `mason-tool-installer` → `ensure_installed` |
 | `tree-sitter` CLI | `mason-tool-installer`; Mason ships it as a **prebuilt GitHub release binary**, so no `cargo`, `brew`, or `apt` is needed |
 | Treesitter parsers | `require("nvim-treesitter").install(...)`, compiled locally |
+| blink.cmp's Rust fuzzy matcher | Prebuilt binary fetched by blink because the plugin is pinned to a released tag (`version = "1.*"`); no `cargo` required. Confirm with `:checkhealth blink.cmp`. |
 | `fzf` binary | `junegunn/fzf` plugin with `build = "./install --bin"`, which downloads a prebuilt per-arch tarball (no Go toolchain). Its `bin/` is prepended to `PATH` inside nvim only. If a compatible `fzf` is already on `PATH`, the script symlinks that instead of downloading. |
 
 ### Bootstrap ordering
@@ -103,6 +104,10 @@ in-editor mechanism can do for you.
 - Treesitter folding is available but not enabled. To turn it on:
   `vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"` and
   `vim.wo.foldmethod = "expr"`.
+- Completion is blink.cmp with the `super-tab` preset: `<Tab>` accepts the
+  selected item (or jumps forward in a snippet), `<CR>` also accepts, `<C-n>` /
+  `<C-p>` cycle, `<C-e>` cancels, `<C-k>` toggles signature help. Snippets use
+  Neovim's built-in `vim.snippet`, so there is no LuaSnip.
 - LSP servers are configured with the native `vim.lsp.config()` /
   `vim.lsp.enable()` API. `mason-lspconfig` runs with
   `automatic_enable = false` so that `init.lua` stays the single source of
