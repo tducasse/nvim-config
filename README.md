@@ -4,6 +4,9 @@ Single-file Neovim config (`init.lua`) targeting **Neovim >= 0.12**, built to be
 self-bootstrapping: clone it, open `nvim`, and it installs everything it can by
 itself. Works on macOS and WSL from the same file.
 
+Deliberately minimal, and native-first — LSP, diagnostics, keymaps and snippets
+use built-in Neovim APIs wherever they exist rather than a plugin.
+
 ## Setup
 
 ### macOS
@@ -28,6 +31,102 @@ First launch takes a few minutes: lazy.nvim clones plugins, Mason downloads
 language servers, and Treesitter compiles parsers. Watch progress with `:Lazy`
 and `:Mason`. It is safe to quit and reopen; everything is idempotent.
 
+## What's in here
+
+| Area | Plugin |
+| --- | --- |
+| Manager | lazy.nvim |
+| Theme | kanagawa |
+| Syntax | nvim-treesitter (`main` branch) |
+| Find | fzf-lua (+ self-installing `fzf`) |
+| Explorer | nvim-tree |
+| Git | gitsigns, neogit, codediff, fugitive |
+| Format | conform (`eslint_d`, `stylua`) |
+| Complete | blink.cmp |
+| LSP | nvim-lspconfig + mason, mason-tool-installer |
+| Editing / UI | which-key, nvim-surround, lualine |
+| AI | claudecode.nvim |
+
+Servers: `ts_ls`, `lua_ls`, `eslint`, `ruby_lsp`, `zls`.
+
+## Keymaps
+
+Leader is `<Space>`. Press `<leader>` and pause for which-key, or `<leader>?` for
+buffer-local maps.
+
+### Find
+
+| Key | Action |
+| --- | --- |
+| `<leader>ff` | Find files |
+| `<leader>fg` | Live grep |
+| `<leader>fw` | Grep word under cursor |
+| `<leader>fb` | Buffers |
+| `<leader>e` | Toggle file explorer |
+
+### Git
+
+| Key | Action |
+| --- | --- |
+| `<leader>gg` / `<leader>gc` | Neogit status / commit |
+| `<leader>gs` | Git status (picker) |
+| `<leader>gl` / `<leader>gf` | Git log, repo / current file |
+| `<leader>gb` | Git branches |
+| `]h` / `[h` | Next / previous hunk |
+| `<leader>hp` | Preview hunk |
+| `<leader>hs` / `<leader>hr` | Stage / reset hunk |
+| `<leader>hb` | Toggle line blame (on by default) |
+
+### Diff
+
+| Key | Action |
+| --- | --- |
+| `<leader>dv` | Diff vs HEAD |
+| `<leader>dm` | Diff vs `master` |
+| `<leader>ds` | Diff staged |
+| `<leader>dh` | File history |
+| `<leader>dc` | Close diff tab |
+
+### LSP
+
+Most of these are **Neovim 0.11+ built-in defaults**, not config:
+
+| Key | Action | Source |
+| --- | --- | --- |
+| `gd` | Goto definition (fzf-lua) | config |
+| `grr` | References (fzf-lua) | config override |
+| `grn` | Rename | built-in |
+| `gra` | Code action (routed to fzf-lua via `ui.select`) | built-in |
+| `gri` / `grt` | Implementation / type definition | built-in |
+| `gO` | Document symbols | built-in |
+| `K` | Hover | built-in |
+| `<C-s>` (insert) | Signature help | built-in |
+| `[d` / `]d` | Previous / next diagnostic | built-in |
+| `<C-w>d` | Diagnostic float on demand | built-in |
+| `<leader>q` | Diagnostics to loclist | config |
+
+> Never map bare `gr` — it prefixes the `gr*` defaults above, which makes every
+> one of them wait for `timeoutlen`.
+
+### Completion (blink.cmp, `super-tab` preset)
+
+| Key | Action |
+| --- | --- |
+| `<Tab>` | Accept selected item, else jump forward in snippet |
+| `<CR>` | Accept |
+| `<C-n>` / `<C-p>` | Next / previous item |
+| `<C-e>` | Cancel |
+| `<C-k>` | Toggle signature help |
+| `<C-d>` / `<C-u>` | Scroll docs up / down (inverted on purpose) |
+
+### Other
+
+| Key | Action |
+| --- | --- |
+| `<leader>cs` (visual) | Send selection to Claude |
+| `<leader>ca` | Add file to Claude context |
+| `ys` / `cs` / `ds` | Surround add / change / delete |
+
 ## What installs itself
 
 Deliberately, no package manager is required for any of this:
@@ -36,12 +135,11 @@ Deliberately, no package manager is required for any of this:
 | --- | --- |
 | lazy.nvim | Bootstrap clone at the top of `init.lua` |
 | Plugins | lazy.nvim |
-| LSP servers (`ts_ls`, `lua_ls`, `eslint`, `ruby_lsp`, `zls`) | `mason-lspconfig` → `ensure_installed` |
-| `eslint_d`, `stylua` | `mason-tool-installer` → `ensure_installed` |
+| LSP servers, `eslint_d`, `stylua` | `mason-tool-installer` → `ensure_installed`, by Mason package name |
 | `tree-sitter` CLI | `mason-tool-installer`; Mason ships it as a **prebuilt GitHub release binary**, so no `cargo`, `brew`, or `apt` is needed |
 | Treesitter parsers | `require("nvim-treesitter").install(...)`, compiled locally |
 | blink.cmp's Rust fuzzy matcher | Prebuilt binary fetched by blink because the plugin is pinned to a released tag (`version = "1.*"`); no `cargo` required. Confirm with `:checkhealth blink.cmp`. |
-| `fzf` binary | `junegunn/fzf` plugin with `build = "./install --bin"`, which downloads a prebuilt per-arch tarball (no Go toolchain). Its `bin/` is prepended to `PATH` inside nvim only. If a compatible `fzf` is already on `PATH`, the script symlinks that instead of downloading. |
+| `fzf` binary | `junegunn/fzf` with `build = "./install --bin"`, which downloads a prebuilt per-arch tarball (no Go toolchain). Its `bin/` is prepended to `PATH` inside nvim only. If a compatible `fzf` is already on `PATH`, the script symlinks that instead of downloading. |
 
 ### Bootstrap ordering
 
@@ -122,22 +220,35 @@ the project and restart. Not a config problem.
 :Lazy
 :Mason
 :ConformInfo
+:checkhealth blink.cmp
 ```
 
-## Notes
+## Design notes
 
-- Diagnostics use `virtual_lines = { current_line = true }` (Neovim 0.11+)
-  rather than the older `CursorHold` + `open_float` pattern.
-- `[d` / `]d` are Neovim 0.11+ built-in defaults and are not remapped here.
-  `vim.diagnostic.goto_prev` / `goto_next` are deprecated and removed in 0.13.
-- Treesitter folding is available but not enabled. To turn it on:
+- **Diagnostics** show nothing inline. Signs and underlines mark the line, and
+  the full message appears in a float on `CursorHold` (`updatetime` controls the
+  delay). `virtual_text` truncates at the window edge and `virtual_lines` pushes
+  the buffer down; a float costs no buffer space, which matters for long
+  TypeScript errors. The autocmd bails if another float is already open so a
+  hover is not clobbered.
+- **LSP** is configured with the native `vim.lsp.config()` / `vim.lsp.enable()`
+  API. A single `vim.lsp.config("*", ...)` supplies capabilities to every
+  server. `nvim-lspconfig` is kept only for its `lsp/*.lua` data (cmd,
+  filetypes, root markers).
+- **`mason-lspconfig` is deliberately absent.** Its remaining jobs were mapping
+  lspconfig names to Mason package names and auto-enabling servers, both of
+  which `init.lua` does explicitly. One list, named the way Mason names them.
+- **`fugitive` is kept despite heavy overlap** with gitsigns/neogit/codediff,
+  for `:Git <anything>` and 3-way conflict resolution (`:Gdiffsplit!` then
+  `:diffget //2` / `//3`). It is lazy, so it costs no startup time. `:GBrowse`
+  is *not* wired up — it requires `tpope/vim-rhubarb`.
+- **`conform` uses `format_on_save`**, which is synchronous on `BufWritePre` and
+  writes once. The `format_after_save` variant writes, formats, then writes
+  again, double-firing file watchers and HMR.
+- **Treesitter folding** is available but not enabled. To turn it on:
   `vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"` and
   `vim.wo.foldmethod = "expr"`.
-- Completion is blink.cmp with the `super-tab` preset: `<Tab>` accepts the
-  selected item (or jumps forward in a snippet), `<CR>` also accepts, `<C-n>` /
-  `<C-p>` cycle, `<C-e>` cancels, `<C-k>` toggles signature help. Snippets use
-  Neovim's built-in `vim.snippet`, so there is no LuaSnip.
-- LSP servers are configured with the native `vim.lsp.config()` /
-  `vim.lsp.enable()` API. `mason-lspconfig` runs with
-  `automatic_enable = false` so that `init.lua` stays the single source of
-  truth for which servers are enabled.
+- **Single file on purpose.** At ~500 lines with 13 plugins, splitting into
+  `lua/plugins/*.lua` would mean more files than concepts and would hide the
+  load-order constraints in the Treesitter and Mason blocks. Revisit if any
+  section passes ~150 lines, or if platform-specific plugin sets are needed.

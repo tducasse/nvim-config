@@ -1,11 +1,10 @@
--- ==================================================
--- Leader Key (must be set before plugins)
--- ==================================================
-vim.g.mapleader = " "
+-- Neovim config -- requires 0.12+. See README.md for setup and prerequisites.
 
 -- ==================================================
--- Basic Settings
+-- Options
 -- ==================================================
+vim.g.mapleader = " " -- Must be set before lazy.nvim loads
+
 local set = vim.opt
 set.splitright = true
 set.splitbelow = true
@@ -18,33 +17,27 @@ set.number = true
 set.clipboard = "unnamedplus"
 set.termguicolors = true
 set.signcolumn = "yes"
-set.updatetime = 250
+set.updatetime = 250 -- Also the CursorHold delay; raise if the float feels twitchy
 set.autoread = true
 set.scrolloff = 8
 set.cursorline = true
-set.undofile = true -- Persistent undo across sessions
+set.undofile = true
 
--- Diagnostics: nothing inline. Signs and underlines give the ambient "something
--- is wrong here" signal, and the full message appears in a float on CursorHold.
--- Unlike virtual_text (truncates at the window edge) and virtual_lines (pushes
--- the buffer down), a float costs no buffer space and shows every diagnostic on
--- the line, which matters for long TypeScript errors.
+-- ==================================================
+-- Diagnostics
+-- ==================================================
+-- Nothing inline: virtual_text truncates at the window edge and virtual_lines
+-- pushes the buffer down. Signs and underlines mark the line; the full message
+-- appears in a float, which costs no buffer space -- it matters for long TS errors.
 vim.diagnostic.config({
 	virtual_text = false,
-	virtual_lines = false,
-	signs = true, -- Keep gutter markers (E, W)
-	underline = true, -- Keep underlines
-	update_in_insert = false,
 	severity_sort = true,
 })
 
--- Show the diagnostic float when the cursor rests ('updatetime' controls the
--- delay; raise it if this feels twitchy). <C-w>d is the built-in on-demand
--- equivalent if you ever want to drop the automatic behaviour.
 vim.api.nvim_create_autocmd("CursorHold", {
 	callback = function()
-		-- Never stack on top of an existing float, so a hover (K) or signature
-		-- popup does not get clobbered while you are reading it.
+		-- Bail if any float is already open, so a hover (K) or signature popup
+		-- is not clobbered while being read.
 		for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
 			if vim.api.nvim_win_get_config(win).relative ~= "" then
 				return
@@ -73,13 +66,19 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+local function fzf(picker)
+	return function()
+		require("fzf-lua")[picker]()
+	end
+end
+
 -- ==================================================
--- Plugin Setup
+-- Plugins
 -- ==================================================
 require("lazy").setup({
-	-- ==================================================
+	-- --------------------------------------------------
 	-- Theme
-	-- ==================================================
+	-- --------------------------------------------------
 	{
 		"rebelot/kanagawa.nvim",
 		lazy = false,
@@ -92,12 +91,13 @@ require("lazy").setup({
 			vim.cmd.colorscheme("kanagawa")
 		end,
 	},
-	-- ==================================================
-	-- Treesitter (syntax, injections, textobjects)
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- Treesitter
+	-- --------------------------------------------------
 	{
 		-- The `main` branch is a full rewrite; `master` is locked and targets 0.11.
-		-- It explicitly does not support lazy-loading, hence lazy = false.
+		-- main explicitly does not support lazy-loading, hence lazy = false.
 		"nvim-treesitter/nvim-treesitter",
 		branch = "main",
 		lazy = false,
@@ -114,7 +114,7 @@ require("lazy").setup({
 				"gitignore",
 				"html",
 				"javascript",
-				"json", -- the jsonc filetype maps onto this parser
+				"json",
 				"lua",
 				"luadoc",
 				"markdown",
@@ -130,7 +130,7 @@ require("lazy").setup({
 				"zig",
 			}
 
-			-- Highlighting is not automatic on `main`; Neovim provides it and we opt in
+			-- Highlighting is not automatic on main; Neovim provides it and we opt in
 			-- per buffer. Deriving the language from the filetype avoids maintaining a
 			-- parallel filetype list.
 			vim.api.nvim_create_autocmd("FileType", {
@@ -151,9 +151,8 @@ require("lazy").setup({
 				return false
 			end
 
-			-- On a cold start, mason-tool-installer downloads tree-sitter-cli
-			-- asynchronously and prepends Mason's bin to PATH, so installing parsers
-			-- immediately would race it. Wait for Mason instead of failing.
+			-- On a cold start Mason is still downloading tree-sitter-cli in the
+			-- background, so installing parsers immediately would race it.
 			vim.api.nvim_create_autocmd("VimEnter", {
 				once = true,
 				callback = function()
@@ -179,23 +178,20 @@ require("lazy").setup({
 			})
 		end,
 	},
-	-- ==================================================
-	-- File Management
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- Finder & file explorer
+	-- --------------------------------------------------
 	{
 		"ibhagwan/fzf-lua",
 		dependencies = {
 			"nvim-tree/nvim-web-devicons",
-			-- Self-installing fzf binary. `install --bin` downloads a prebuilt
-			-- per-arch tarball (no Go toolchain) and is a no-op once present, so
-			-- fzf-lua works on a fresh machine without brew/apt.
-			{
-				"junegunn/fzf",
-				build = "./install --bin",
-			},
+			-- Self-installing fzf binary: `install --bin` downloads a prebuilt
+			-- per-arch tarball (no Go toolchain) and is a no-op once present.
+			{ "junegunn/fzf", build = "./install --bin" },
 		},
 		config = function()
-			-- Prefer the plugin-local fzf binary; lazy.nvim does not add it to PATH.
+			-- lazy.nvim does not put plugin bin/ dirs on PATH
 			local fzf_bin = vim.fn.stdpath("data") .. "/lazy/fzf/bin"
 			if vim.fn.isdirectory(fzf_bin) == 1 then
 				vim.env.PATH = fzf_bin .. ":" .. vim.env.PATH
@@ -204,64 +200,14 @@ require("lazy").setup({
 			require("fzf-lua").register_ui_select()
 		end,
 		keys = {
-			-- Function references rather than ":lua require(...)<CR>" strings: no
-			-- command-line flash, and errors surface properly.
-			{
-				"<leader>ff",
-				function()
-					require("fzf-lua").files()
-				end,
-				desc = "Find files",
-			},
-			{
-				"<leader>fg",
-				function()
-					require("fzf-lua").live_grep()
-				end,
-				desc = "Live grep",
-			},
-			{
-				"<leader>fw",
-				function()
-					require("fzf-lua").grep_cword()
-				end,
-				desc = "Grep word under cursor",
-			},
-			{
-				"<leader>fb",
-				function()
-					require("fzf-lua").buffers()
-				end,
-				desc = "Buffers",
-			},
-			{
-				"<leader>gs",
-				function()
-					require("fzf-lua").git_status()
-				end,
-				desc = "Git status",
-			},
-			{
-				"<leader>gl",
-				function()
-					require("fzf-lua").git_commits()
-				end,
-				desc = "Git log (repo)",
-			},
-			{
-				"<leader>gf",
-				function()
-					require("fzf-lua").git_bcommits()
-				end,
-				desc = "Git log (file)",
-			},
-			{
-				"<leader>gb",
-				function()
-					require("fzf-lua").git_branches()
-				end,
-				desc = "Git branches",
-			},
+			{ "<leader>ff", fzf("files"), desc = "Find files" },
+			{ "<leader>fg", fzf("live_grep"), desc = "Live grep" },
+			{ "<leader>fw", fzf("grep_cword"), desc = "Grep word under cursor" },
+			{ "<leader>fb", fzf("buffers"), desc = "Buffers" },
+			{ "<leader>gs", fzf("git_status"), desc = "Git status" },
+			{ "<leader>gl", fzf("git_commits"), desc = "Git log (repo)" },
+			{ "<leader>gf", fzf("git_bcommits"), desc = "Git log (file)" },
+			{ "<leader>gb", fzf("git_branches"), desc = "Git branches" },
 		},
 	},
 	{
@@ -271,7 +217,6 @@ require("lazy").setup({
 			{
 				"<leader>e",
 				function()
-					-- If already in nvim-tree, close it. Otherwise, find/open file.
 					if vim.bo.filetype == "NvimTree" then
 						vim.cmd("NvimTreeClose")
 					else
@@ -287,49 +232,35 @@ require("lazy").setup({
 			require("nvim-tree").setup()
 		end,
 	},
-	-- ==================================================
+
+	-- --------------------------------------------------
 	-- Git
-	-- ==================================================
+	-- --------------------------------------------------
 	{
+		-- Largely superseded by gitsigns/neogit/codediff, but kept for `:Git <any>`
+		-- and 3-way conflict resolution (:Gdiffsplit! + :diffget //2 | //3), which
+		-- nothing else here does. Lazy, so it costs no startup time.
+		-- :GBrowse is omitted: it needs tpope/vim-rhubarb, which is not installed.
 		"tpope/vim-fugitive",
-		cmd = {
-			"Git",
-			"G",
-			"Gdiffsplit",
-			"Gread",
-			"Gwrite",
-			"Ggrep",
-			"GMove",
-			"GDelete",
-			"GBrowse",
-			"Git add",
-			"Git commit",
-			"Git push",
-		},
+		cmd = { "Git", "G", "Gdiffsplit", "Gread", "Gwrite", "Ggrep", "GMove", "GDelete" },
 	},
 	{
 		"lewis6991/gitsigns.nvim",
 		event = { "BufRead", "BufNewFile" },
 		keys = {
-			{ "]h", ":Gitsigns next_hunk<CR>", desc = "Next git hunk" },
-			{ "[h", ":Gitsigns prev_hunk<CR>", desc = "Previous git hunk" },
-			{ "<leader>hp", ":Gitsigns preview_hunk<CR>", desc = "Preview git hunk" },
-			{ "<leader>hs", ":Gitsigns stage_hunk<CR>", desc = "Stage hunk" },
-			{ "<leader>hr", ":Gitsigns reset_hunk<CR>", desc = "Reset hunk" },
-			{ "<leader>hb", ":Gitsigns toggle_current_line_blame<CR>", desc = "Toggle git blame" },
+			{ "]h", "<cmd>Gitsigns next_hunk<CR>", desc = "Next git hunk" },
+			{ "[h", "<cmd>Gitsigns prev_hunk<CR>", desc = "Previous git hunk" },
+			{ "<leader>hp", "<cmd>Gitsigns preview_hunk<CR>", desc = "Preview git hunk" },
+			{ "<leader>hs", "<cmd>Gitsigns stage_hunk<CR>", desc = "Stage hunk" },
+			{ "<leader>hr", "<cmd>Gitsigns reset_hunk<CR>", desc = "Reset hunk" },
+			{ "<leader>hb", "<cmd>Gitsigns toggle_current_line_blame<CR>", desc = "Toggle git blame" },
 		},
-		config = function()
-			require("gitsigns").setup({
-				current_line_blame = true, -- ON by default, toggle with <leader>hb
-				current_line_blame_opts = {
-					delay = 100,
-				},
-			})
-		end,
+		opts = {
+			current_line_blame = true, -- Toggle with <leader>hb
+			current_line_blame_opts = { delay = 100 },
+		},
 	},
 	{
-		-- Replaces diffview.nvim, which had no commits for ~2 years. codediff is
-		-- actively maintained and is the diff backend neogit now recommends.
 		"esmuellert/codediff.nvim",
 		cmd = { "CodeDiff" },
 		keys = {
@@ -342,8 +273,6 @@ require("lazy").setup({
 		opts = {},
 	},
 	{
-		-- Magit-style staging/commit/branch UI. Pure Lua, no external binary
-		-- (unlike lazygit), and no longer requires plenary.
 		"NeogitOrg/neogit",
 		dependencies = { "ibhagwan/fzf-lua", "esmuellert/codediff.nvim" },
 		cmd = "Neogit",
@@ -353,91 +282,77 @@ require("lazy").setup({
 		},
 		opts = {},
 	},
-	-- ==================================================
+
+	-- --------------------------------------------------
 	-- Formatting
-	-- ==================================================
+	-- --------------------------------------------------
 	{
 		"stevearc/conform.nvim",
 		event = { "BufWritePre" },
 		cmd = { "ConformInfo" },
-		config = function()
-			require("conform").setup({
-				formatters_by_ft = {
-					javascript = { "eslint_d" },
-					javascriptreact = { "eslint_d" },
-					typescript = { "eslint_d" },
-					typescriptreact = { "eslint_d" },
-					lua = { "stylua" },
-				},
-				-- format_on_save runs on BufWritePre, synchronously: one write.
-				-- format_after_save runs on BufWritePost asynchronously, which writes
-				-- the file, formats, then writes again -- double file-watcher and HMR
-				-- events for anything watching the tree.
-				format_on_save = {
-					lsp_format = "fallback", -- The modern spelling of lsp_fallback = true
-					timeout_ms = 2000,
-				},
-			})
-		end,
+		opts = {
+			formatters_by_ft = {
+				javascript = { "eslint_d" },
+				javascriptreact = { "eslint_d" },
+				typescript = { "eslint_d" },
+				typescriptreact = { "eslint_d" },
+				lua = { "stylua" },
+			},
+			-- format_on_save is synchronous on BufWritePre: one write. The
+			-- format_after_save variant writes, formats, then writes again, which
+			-- double-fires file watchers and HMR.
+			format_on_save = {
+				lsp_format = "fallback",
+				timeout_ms = 2000,
+			},
+		},
 	},
-	-- ==================================================
-	-- Autocompletion
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- Completion
+	-- --------------------------------------------------
 	{
-		-- Replaces nvim-cmp + cmp-nvim-lsp/buffer/path + LuaSnip + cmp_luasnip.
-		-- Snippets use Neovim's built-in vim.snippet, so LuaSnip is unnecessary.
-		-- Pinned to 1.x: v2 is a breaking rewrite that additionally requires
-		-- blink.lib, and only 1.x is tagged for release. The pinned tag also means
-		-- lazy.nvim fetches a prebuilt Rust fuzzy matcher, so no cargo is needed.
+		-- Snippets use Neovim's built-in vim.snippet, so there is no LuaSnip.
+		-- Pinned to 1.x: v2 is a breaking rewrite that also needs blink.lib, and
+		-- only 1.x is tagged. A tagged version also means a prebuilt Rust fuzzy
+		-- matcher is fetched, so cargo is not required.
 		"saghen/blink.cmp",
 		version = "1.*",
 		event = "InsertEnter",
 		opts = {
-			-- 'super-tab' matches the previous behaviour: Tab accepts the selected
-			-- item when the menu is open, otherwise jumps forward in a snippet,
-			-- otherwise falls through to normal Tab.
 			keymap = {
+				-- super-tab: Tab accepts when the menu is open, else jumps forward in
+				-- a snippet, else falls through.
 				preset = "super-tab",
 				["<CR>"] = { "select_and_accept", "fallback" },
-				-- Preserved verbatim from the nvim-cmp config, including the
-				-- inverted feel: <C-d> scrolled docs up, <C-u> scrolled them down.
+				-- Inverted on purpose, carried over from the old nvim-cmp mappings
 				["<C-d>"] = { "scroll_documentation_up", "fallback" },
 				["<C-u>"] = { "scroll_documentation_down", "fallback" },
 			},
-			sources = {
-				-- blink ranks a single merged list rather than using nvim-cmp's
-				-- fallback groups.
-				default = { "lsp", "path", "snippets", "buffer" },
-			},
+			sources = { default = { "lsp", "path", "snippets", "buffer" } },
 			completion = {
-				-- Off by default in blink; nvim-cmp showed the docs window, so keep it.
 				documentation = { auto_show = true, auto_show_delay_ms = 200 },
-				-- accept.auto_brackets is already enabled by default: accepting a
-				-- function inserts () and places the cursor inside.
 			},
-			-- Signature help while typing arguments; the old cmp setup had none.
 			signature = { enabled = true },
 			fuzzy = { implementation = "prefer_rust_with_warning" },
 		},
 	},
-	-- ==================================================
-	-- LSP (Language Server Protocol)
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- LSP
+	-- --------------------------------------------------
 	{
-		-- Mason installs every external binary into stdpath("data")/mason/bin and
-		-- prepends that to PATH. Note: the mason projects moved to mason-org/*.
-		--
-		-- mason-lspconfig is deliberately not used. Its only remaining jobs were
-		-- translating lspconfig server names into Mason package names, and
-		-- auto-enabling installed servers, which we already do explicitly. Naming
-		-- packages directly keeps every tool in one declarative list.
+		-- Mason installs every external binary and prepends its bin/ to PATH.
+		-- mason-lspconfig is deliberately absent: its remaining jobs were mapping
+		-- lspconfig names to Mason package names and auto-enabling servers, both of
+		-- which are done explicitly here. One list, named the way Mason names them.
 		"mason-org/mason.nvim",
 		dependencies = { "WhoIsSethDaniel/mason-tool-installer.nvim" },
 		config = function()
 			require("mason").setup()
 			require("mason-tool-installer").setup({
 				ensure_installed = {
-					-- LSP servers (Mason package names, not lspconfig names)
+					-- Servers
 					"typescript-language-server",
 					"lua-language-server",
 					"eslint-lsp",
@@ -446,55 +361,60 @@ require("lazy").setup({
 					-- Formatters
 					"eslint_d",
 					"stylua",
-					-- Required by nvim-treesitter (main). Mason ships it as a prebuilt
-					-- GitHub release binary, so this needs no cargo/brew/apt.
+					-- Required by nvim-treesitter; a prebuilt release binary, so this
+					-- needs no cargo/brew/apt.
 					"tree-sitter-cli",
 				},
 			})
 		end,
 	},
 	{
-		-- On 0.11+ this plugin is essentially a data package: it ships lsp/*.lua
-		-- definitions (cmd, filetypes, root_markers) that Neovim auto-loads from
-		-- the runtimepath. Configuration below uses the native vim.lsp API.
+		-- On 0.11+ this is effectively a data package: it ships the lsp/*.lua
+		-- definitions (cmd, filetypes, root_markers) that Neovim auto-loads.
+		-- Everything below uses the native vim.lsp API.
 		"neovim/nvim-lspconfig",
 		dependencies = { "mason-org/mason.nvim", "saghen/blink.cmp" },
 		config = function()
-			-- "*" applies to every server, replacing the per-server repetition.
-			-- The second arg folds in Neovim's own defaults, which cmp_nvim_lsp's
-			-- default_capabilities() did not do.
+			-- "*" applies to every server. The second arg folds in Neovim's own
+			-- defaults, which cmp_nvim_lsp's default_capabilities() did not.
 			vim.lsp.config("*", {
 				capabilities = require("blink.cmp").get_lsp_capabilities(nil, true),
 			})
 
-			-- Neovim 0.11+ already provides grn (rename), gra (code action),
-			-- grr (references), gri (implementation), grt (type definition),
-			-- gO (document symbol), K (hover) and insert-mode <C-s> (signature).
-			-- Only override where fzf-lua's picker is a genuine upgrade.
+			-- 0.11+ already provides grn (rename), gra (code action), grr
+			-- (references), gri (implementation), grt (type definition), gO (document
+			-- symbol), K (hover) and insert-mode <C-s> (signature). Override only
+			-- where fzf-lua's picker wins.
 			--
-			-- Do NOT map bare "gr": it is the prefix of the gr* defaults above, so
-			-- mapping it makes all of them wait for 'timeoutlen' before resolving.
+			-- Never map bare "gr": it prefixes the gr* defaults above, which makes
+			-- every one of them wait for 'timeoutlen'.
 			vim.api.nvim_create_autocmd("LspAttach", {
 				callback = function(args)
 					local opts = { buffer = args.buf }
-					vim.keymap.set("n", "gd", function()
-						require("fzf-lua").lsp_definitions()
-					end, vim.tbl_extend("force", opts, { desc = "Goto definition" }))
-					vim.keymap.set("n", "grr", function()
-						require("fzf-lua").lsp_references()
-					end, vim.tbl_extend("force", opts, { desc = "References" }))
+					vim.keymap.set(
+						"n",
+						"gd",
+						fzf("lsp_definitions"),
+						vim.tbl_extend("force", opts, {
+							desc = "Goto definition",
+						})
+					)
+					vim.keymap.set(
+						"n",
+						"grr",
+						fzf("lsp_references"),
+						vim.tbl_extend("force", opts, {
+							desc = "References",
+						})
+					)
 				end,
 			})
 
-			-- Lua
 			vim.lsp.config("lua_ls", {
-				settings = {
-					Lua = { diagnostics = { globals = { "vim" } } },
-				},
+				settings = { Lua = { diagnostics = { globals = { "vim" } } } },
 			})
 
-			-- ESLint (real-time linting diagnostics; formatting is done by eslint_d
-			-- via conform, so the server's own formatter is disabled)
+			-- Diagnostics only; eslint_d does the formatting via conform
 			vim.lsp.config("eslint", {
 				settings = {
 					format = false,
@@ -502,11 +422,8 @@ require("lazy").setup({
 				},
 			})
 
-			-- Ruby
 			vim.lsp.config("ruby_lsp", {
-				flags = {
-					debounce_text_changes = 150,
-				},
+				flags = { debounce_text_changes = 150 },
 				init_options = {
 					indexing = {
 						excludedPatterns = {
@@ -523,13 +440,13 @@ require("lazy").setup({
 				},
 			})
 
-			-- ts_ls and zls need no extra settings beyond the "*" defaults.
 			vim.lsp.enable({ "ts_ls", "lua_ls", "eslint", "ruby_lsp", "zls" })
 		end,
 	},
-	-- ==================================================
-	-- UI / Editing (all pure Lua, no external binaries)
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- Editing & UI
+	-- --------------------------------------------------
 	{
 		"folke/which-key.nvim",
 		event = "VeryLazy",
@@ -556,37 +473,34 @@ require("lazy").setup({
 		event = "VeryLazy",
 		opts = {
 			options = {
-				theme = "auto", -- Picks up kanagawa automatically
+				theme = "auto",
 				globalstatus = true,
 				section_separators = "",
 				component_separators = "",
 			},
 		},
 	},
-	-- ==================================================
-	-- Claude Code IDE Integration
-	-- ==================================================
+
+	-- --------------------------------------------------
+	-- Claude Code
+	-- --------------------------------------------------
 	{
 		"coder/claudecode.nvim",
-		lazy = false, -- Load immediately to start WebSocket server
-		priority = 50, -- Load early but after core plugins
+		lazy = false, -- Starts the WebSocket server
+		priority = 50,
 		opts = {
-			terminal = {
-				provider = "none", -- No terminal management; run Claude externally in tmux
-			},
+			terminal = { provider = "none" }, -- Claude runs externally in tmux
 		},
 		config = function(_, opts)
 			require("claudecode").setup(opts)
-			-- Set up keymaps after plugin loads
-			vim.keymap.set("v", "<leader>cs", ":ClaudeCodeSend<CR>", { desc = "Send selection to Claude" })
-			vim.keymap.set("n", "<leader>ca", ":ClaudeCodeAdd<CR>", { desc = "Add file to Claude context" })
+			vim.keymap.set("v", "<leader>cs", "<cmd>ClaudeCodeSend<CR>", { desc = "Send selection to Claude" })
+			vim.keymap.set("n", "<leader>ca", "<cmd>ClaudeCodeAdd<CR>", { desc = "Add file to Claude context" })
 		end,
 	},
 })
 
 -- ==================================================
--- Additional Keymaps
+-- Keymaps
 -- ==================================================
--- Note: [d and ]d are built-in default mappings in Nvim 0.11+, so they are not
--- redefined here. vim.diagnostic.goto_prev/goto_next are deprecated (removed in 0.13).
+-- [d and ]d are 0.11+ defaults and are not redefined here.
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
