@@ -86,6 +86,35 @@ in-editor mechanism can do for you.
 - Treesitter parsers are compiled inside WSL, so `build-essential` is required
   and cannot be skipped.
 
+## Troubleshooting
+
+### `ruby-lsp` fails to install with a zlib `LoadError`
+
+If Mason reports `gem failed with exit code 1` and the log contains
+`Library not loaded: /opt/homebrew/opt/zlib/lib/libz.1.dylib`, the Ruby
+install is broken, not the config — rvm compiled Ruby against Homebrew's
+keg-only zlib and that formula was later removed (`brew autoremove` will do
+this, because zlib is usually present only as someone else's dependency).
+Confirm with:
+
+```sh
+ruby -rzlib -e 'puts Zlib::VERSION'   # raises LoadError when broken
+```
+
+Fix by reinstalling it explicitly, which also marks it as
+installed-on-request so `brew autoremove` leaves it alone in future:
+
+```sh
+brew install zlib
+```
+
+This breaks every gem operation, not just Mason.
+
+### `ruby_lsp` exits with code 78
+
+`Project contains a Gemfile, but no Gemfile.lock` — run `bundle install` in
+the project and restart. Not a config problem.
+
 ## Health check
 
 ```vim
