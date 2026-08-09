@@ -24,11 +24,13 @@ set.scrolloff = 8
 set.cursorline = true
 set.undofile = true -- Persistent undo across sessions
 
--- Diagnostics: virtual_lines shows the current line's diagnostic inline (Nvim 0.11+),
--- which replaces the old CursorHold + open_float pattern.
+-- Diagnostics: show the message inline on the cursor's line only (Nvim 0.11+),
+-- replacing the old CursorHold + open_float pattern. virtual_text keeps it on a
+-- single line so the buffer never shifts as the cursor moves; swap to
+-- virtual_lines = { current_line = true } if you want full multi-line messages.
 vim.diagnostic.config({
-	virtual_text = false, -- No inline text on every line
-	virtual_lines = { current_line = true }, -- Expand only under the cursor
+	virtual_text = { current_line = true }, -- Inline, cursor line only
+	virtual_lines = false,
 	signs = true, -- Keep gutter markers (E, W)
 	underline = true, -- Keep underlines
 	update_in_insert = false,
