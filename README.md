@@ -157,9 +157,11 @@ stacktrace.
 | --- | --- | --- | --- |
 | C compiler | Xcode Command Line Tools | `build-essential` | Compiling Treesitter parsers |
 | `git`, `curl`, `tar` | preinstalled | `git curl` via apt | lazy.nvim, Mason, parser downloads |
+| `rg` (ripgrep) | `brew install ripgrep` | `sudo apt install ripgrep` | Grep pickers in fzf-lua |
 | Nerd Font | see below | see below | Icons in fzf-lua, nvim-tree, lualine |
 | `node` / `npm` | [fnm](https://github.com/Schniz/fnm) | fnm | `ts_ls`, `eslint`, `eslint_d` |
 | `ruby` / `gem` | rvm / rbenv | rvm / rbenv | `ruby_lsp` |
+| `zig` | Install a version compatible with ZLS | Install a version compatible with ZLS | Zig compiler used by `zls`; Mason installs ZLS, not Zig |
 
 `node` and `ruby` are managed per-project by version managers, so they are
 intentionally left out of any bootstrap script.
@@ -245,9 +247,9 @@ the project and restart. Not a config problem.
 - **`conform` uses `format_on_save`**, which is synchronous on `BufWritePre` and
   writes once. The `format_after_save` variant writes, formats, then writes
   again, double-firing file watchers and HMR.
-- **Treesitter folding** is available but not enabled. To turn it on:
-  `vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"` and
-  `vim.wo.foldmethod = "expr"`.
+- **Treesitter folding** is enabled, with files fully open by default
+  (`foldlevel` and `foldlevelstart` are 99). Use `za` to toggle a fold,
+  `zc` / `zo` to close / open it, and `zM` / `zR` to close / open all folds.
 - **Single file on purpose.** At ~500 lines with 13 plugins, splitting into
   `lua/plugins/*.lua` would mean more files than concepts and would hide the
   load-order constraints in the Treesitter and Mason blocks. Revisit if any

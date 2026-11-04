@@ -4,6 +4,8 @@
 -- Options
 -- ==================================================
 vim.g.mapleader = " " -- Must be set before lazy.nvim loads
+vim.g.loaded_netrw = 1 -- Disable netrw before its startup plugins load
+vim.g.loaded_netrwPlugin = 1
 
 local set = vim.opt
 set.splitright = true
@@ -22,6 +24,10 @@ set.autoread = true
 set.scrolloff = 8
 set.cursorline = true
 set.undofile = true
+set.foldmethod = "expr"
+set.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+set.foldlevel = 99
+set.foldlevelstart = 99 -- Keep files open; fold sections manually with za/zc
 
 -- ==================================================
 -- Diagnostics
@@ -184,6 +190,7 @@ require("lazy").setup({
 	-- --------------------------------------------------
 	{
 		"ibhagwan/fzf-lua",
+		lazy = false, -- Register vim.ui.select before the first code action
 		dependencies = {
 			"nvim-tree/nvim-web-devicons",
 			-- Self-installing fzf binary: `install --bin` downloads a prebuilt
@@ -227,8 +234,6 @@ require("lazy").setup({
 			},
 		},
 		config = function()
-			vim.g.loaded_netrw = 1
-			vim.g.loaded_netrwPlugin = 1
 			require("nvim-tree").setup()
 		end,
 	},
